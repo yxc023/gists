@@ -376,4 +376,91 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
     return exposedObject;
 }
 
-// todo 没有setter的属性怎么 autowired
+
+
+
+
+
+
+/**
+ * Populate the bean instance in the given BeanWrapper with the property values
+ * from the bean definition.
+ * @param beanName the name of the bean
+ * @param mbd the bean definition for the bean
+ * @param bw BeanWrapper with bean instance
+ */
+protected void populateBean(String beanName, RootBeanDefinition mbd, BeanWrapper bw) {
+    PropertyValues pvs = mbd.getPropertyValues();
+
+    if (bw == null) {
+        if (!pvs.isEmpty()) {
+            throw new BeanCreationException(
+                    mbd.getResourceDescription(), beanName, "Cannot apply property values to null instance");
+        }
+        else {
+            // Skip property population phase for null instance.
+            return;
+        }
+    }
+
+    // Give any InstantiationAwareBeanPostProcessors the opportunity to modify the
+    // state of the bean before properties are set. This can be used, for example,
+    // to support styles of field injection.
+    boolean continueWithPropertyPopulation = true;
+
+    if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
+        for (BeanPostProcessor bp : getBeanPostProcessors()) {
+            if (bp instanceof InstantiationAwareBeanPostProcessor) {
+                InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
+                if (!ibp.postProcessAfterInstantiation(bw.getWrappedInstance(), beanName)) {
+                    continueWithPropertyPopulation = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!continueWithPropertyPopulation) {
+        return;
+    }
+
+    if (mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_NAME ||
+            mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_TYPE) {
+        MutablePropertyValues newPvs = new MutablePropertyValues(pvs);
+
+        // Add property values based on autowire by name if applicable.
+        if (mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_NAME) {
+            autowireByName(beanName, mbd, bw, newPvs);
+        }
+
+        // Add property values based on autowire by type if applicable.
+        if (mbd.getResolvedAutowireMode() == RootBeanDefinition.AUTOWIRE_BY_TYPE) {
+            autowireByType(beanName, mbd, bw, newPvs);
+        }
+
+        pvs = newPvs;
+    }
+
+    boolean hasInstAwareBpps = hasInstantiationAwareBeanPostProcessors();
+    boolean needsDepCheck = (mbd.getDependencyCheck() != RootBeanDefinition.DEPENDENCY_CHECK_NONE);
+
+    if (hasInstAwareBpps || needsDepCheck) {
+        PropertyDescriptor[] filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
+        if (hasInstAwareBpps) {
+            for (BeanPostProcessor bp : getBeanPostProcessors()) {
+                if (bp instanceof InstantiationAwareBeanPostProcessor) {
+                    InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
+                    pvs = ibp.postProcessPropertyValues(pvs, filteredPds, bw.getWrappedInstance(), beanName);
+                    if (pvs == null) {
+                        return;
+                    }
+                }
+            }
+        }
+        if (needsDepCheck) {
+            checkDependencies(beanName, mbd, filteredPds, pvs);
+        }
+    }
+
+    applyPropertyValues(beanName, mbd, bw, pvs);
+}
